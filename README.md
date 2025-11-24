@@ -1,6 +1,6 @@
 # go-pkg
 
-通用 Go 工具包，提供各种实用的中间件和工具函数，用于简化开发流程、统一代码风格和提高代码质量。
+通用 Go 工具包，提供各种实用的中间件和工具函数，用于简化开发流程、统一代码风格和提高代码质量。支持 Gin 和 Kratos 两种框架。
 
 ## 目录
 
@@ -38,6 +38,11 @@ go get github.com/gaoyong06/go-pkg
 
 ## 模块说明
 
+本工具包支持以下两种框架：
+
+- **Gin 框架**：适用于传统的 HTTP API 服务
+- **Kratos 框架**：适用于微服务架构
+
 ### 错误处理
 
 `errors` 包提供了统一的错误处理机制，包括：
@@ -57,13 +62,19 @@ err := errors.NewValidationError("用户数据验证失败", nil).
 err := errors.NewNotFoundError("找不到指定的用户", nil).
     AddDetail("id", "ID为123的用户不存在")
 
-// 使用错误处理中间件
-r.Use(errors.ErrorHandlerMiddleware())
+// 在 Gin 框架中使用错误处理中间件
+r.Use(error.ErrorHandlerMiddleware())
+
+// 在 Kratos 框架中使用错误处理中间件
+server := http.NewServer(
+    http.Address(":8000"),
+    http.Middleware(error.KratosErrorHandlerMiddleware())
+)
 ```
 
 ### 分页中间件
 
-`middleware/pagination` 包提供了处理 API 分页的中间件和工具函数：
+`middleware/pagination` 包提供了处理 API 分页的中间件和工具函数，支持 Gin 和 Kratos 两种框架：
 
 - 提取和验证分页参数（页码、每页数量）
 - 计算分页偏移量
@@ -71,10 +82,10 @@ r.Use(errors.ErrorHandlerMiddleware())
 - 分页相关的响应头
 
 ```go
-// 注册分页中间件
+// 在 Gin 框架中使用分页中间件
 r.GET("/users", pagination.Middleware(), listUsers)
 
-// 在处理函数中使用分页参数
+// 在 Gin 处理函数中使用分页参数
 func listUsers(c *gin.Context) {
     // 获取分页参数
     page, pageSize := pagination.GetPageParams(c)
@@ -86,11 +97,33 @@ func listUsers(c *gin.Context) {
     // 返回分页响应
     pagination.RespondWithPagination(c, users, total)
 }
+
+// 在 Kratos 框架中使用分页中间件
+server := http.NewServer(
+    http.Address(":8000"),
+    http.Middleware(pagination.KratosMiddleware())
+)
+
+// 在 Kratos 处理函数中使用分页参数
+func listUsers(ctx http.Context) error {
+    // 获取分页参数
+    paginationInfo := pagination.GetPaginationFromContext(ctx)
+    page := paginationInfo.Page
+    pageSize := paginationInfo.PageSize
+    offset := pagination.GetOffset(page, pageSize)
+    
+    // 查询数据库（示例）
+    users, total := db.GetUsers(offset, pageSize)
+    
+    // 返回分页响应
+    result := pagination.NewPaginationResult(users, total, page, pageSize)
+    return ctx.JSON(200, result)
+}
 ```
 
 ### 过滤中间件
 
-`middleware/filter` 包提供了处理 API 过滤、排序和搜索的中间件和工具函数：
+`middleware/filter` 包提供了处理 API 过滤、排序和搜索的中间件和工具函数，支持 Gin 和 Kratos 两种框架：
 
 - 支持多种过滤操作符（等于、不等于、大于、小于、包含等）
 - 支持多字段排序（升序、降序）
@@ -98,10 +131,10 @@ func listUsers(c *gin.Context) {
 - 支持字段选择
 
 ```go
-// 注册过滤中间件
+// 在 Gin 框架中使用过滤中间件
 r.GET("/users", filter.Middleware(), listUsers)
 
-// 在处理函数中使用过滤选项
+// 在 Gin 处理函数中使用过滤选项
 func listUsers(c *gin.Context) {
     // 获取过滤选项
     filterOptions := filter.GetFilterOptions(c)
@@ -112,11 +145,33 @@ func listUsers(c *gin.Context) {
     
     // 查询数据库...
 }
+
+// 在 Kratos 框架中使用过滤中间件
+server := http.NewServer(
+    http.Address(":8000"),
+    http.Middleware(filter.KratosMiddleware())
+)
+
+// 在 Kratos 处理函数中使用过滤选项
+func listUsers(ctx http.Context) error {
+    // 获取过滤选项
+    filterOptions := filter.GetFilterOptionsFromContext(ctx)
+    
+    // 构建查询条件（示例）
+    whereClause, args := filter.BuildWhereClause(filterOptions.Filters)
+    orderByClause := filter.BuildOrderByClause(filterOptions.Sorts)
+    
+    // 查询数据库...
+    return ctx.JSON(200, result)
+}
 ```
 
 ## 使用示例
 
-完整的使用示例请参考 `examples` 目录下的示例代码。
+完整的使用示例请参考 `examples` 目录下的示例代码：
+
+- `examples/main.go`：基于 Gin 框架的示例
+- `examples/kratos_example/main.go`：基于 Kratos 框架的示例
 
 ## 贡献指南
 
