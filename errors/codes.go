@@ -16,16 +16,18 @@ package errors
 //   2. 编号紧凑易读，方便在日志、告警和文档中快速定位
 //   3. 扩展模块时优先复用剩余编号，不鼓励一次性预留过大的区间
 //
-// 服务标识分配（持续补充）：
+// 服务标识分配（持续补充，按顺序定义）：
 //   10: 通用服务 (common-service)
 //   11: 用户认证服务 (passport-service)
 //   12: 支付服务 (payment-service)
 //   13: 订阅服务 (subscription-service)
 //   14: 通知服务 (notification-service)
 //   15: 桌位排期服务 (table-plan-service)
+//   16: 营销服务 (marketing-service)
 //   17: API Key 服务 (api-key-service)
+//   18: 资产服务 (asset-service)
 //   19: 计费服务 (billing-service)
-//   16, 18, 20-99: 预留其他服务
+//   20-99: 预留其他服务
 //
 // 模块标识建议：
 //   00: 参数校验、通用校验
@@ -84,25 +86,6 @@ const (
 	ErrCodeBusinessRuleViolation = 100402
 	// ErrCodeInsufficientBalance 余额不足
 	ErrCodeInsufficientBalance = 100403
-
-	// ========== API Key 服务错误码 (服务标识 17: 170000-179999) ==========
-	// API Key 管理模块 (170000-170099)
-	// ErrCodeApiKeyAlreadyExists 用户已存在活跃的 API Key
-	ErrCodeApiKeyAlreadyExists = 170001
-	// ErrCodeApiKeyGenerateFailed 生成 API Key 失败
-	ErrCodeApiKeyGenerateFailed = 170002
-	// ErrCodeApiKeyCreateFailed 创建 API Key 失败
-	ErrCodeApiKeyCreateFailed = 170003
-	// ErrCodeApiKeyNotFound 未找到活跃的 API Key
-	ErrCodeApiKeyNotFound = 170004
-	// ErrCodeApiKeyNotExists API Key 不存在
-	ErrCodeApiKeyNotExists = 170005
-	// ErrCodeApiKeyDeleteFailed 删除 API Key 失败
-	ErrCodeApiKeyDeleteFailed = 170006
-	// ErrCodeApiKeyInvalid 无效或已停用的 API Key
-	ErrCodeApiKeyInvalid = 170007
-	// ErrCodeApiKeyCheckFailed 检查现有 API Key 失败
-	ErrCodeApiKeyCheckFailed = 170008
 )
 
 // 服务错误码范围示例（SS 对应服务标识，MM 根据实际模块划分）：
