@@ -24,7 +24,8 @@ package errors
 //   14: 通知服务 (notification-service)
 //   15: 桌位排期服务 (table-plan-service)
 //   17: API Key 服务 (api-key-service)
-//   16, 18-99: 预留其他服务
+//   19: 计费服务 (billing-service)
+//   16, 18, 20-99: 预留其他服务
 //
 // 模块标识建议：
 //   00: 参数校验、通用校验
