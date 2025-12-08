@@ -29,6 +29,22 @@ func NewResponseEncoder(errorHandler ErrorHandler, config *Config) func(http.Res
 
 		w.Header().Set("Content-Type", "application/json")
 
+		// 如果 v 为 nil（服务返回 nil, nil），返回 data 为 null 的响应
+		if v == nil {
+			traceId := GenerateUUID()
+			host := r.Host
+			response := &ResponseStructure{
+				Success:      true,
+				Data:         nil,
+				ErrorCode:    "",
+				ErrorMessage: "",
+				ShowType:     ShowTypeSilent,
+				TraceId:      traceId,
+				Host:         host,
+			}
+			return json.NewEncoder(w).Encode(response)
+		}
+
 		// 如果已经是ResponseStructure格式，更新host信息后序列化
 		if resp, ok := v.(*ResponseStructure); ok {
 			// 更新host信息为真实的请求主机名
@@ -139,4 +155,3 @@ func NewErrorEncoder(errorHandler ErrorHandler) func(http.ResponseWriter, *http.
 		json.NewEncoder(w).Encode(response)
 	}
 }
-
