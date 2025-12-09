@@ -52,20 +52,17 @@ func extractAppID(ctx context.Context) string {
 }
 
 // extractAppIDFromGRPCMetadata 从 gRPC metadata 中提取 appId
+// 只支持 X-App-Id 一个标准名称（gRPC metadata 的 key 会被转换为小写）
 func extractAppIDFromGRPCMetadata(ctx context.Context) string {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return ""
 	}
 
-	// gRPC metadata 的 key 会被转换为小写，并且可以带 "-" 或 "_"
-	// 尝试多种可能的 key 格式
-	keys := []string{"x-app-id", "x_app_id", "X-App-Id"}
-	for _, key := range keys {
-		values := md.Get(key)
-		if len(values) > 0 && values[0] != "" {
-			return strings.TrimSpace(values[0])
-		}
+	// gRPC metadata 的 key 会被转换为小写，所以使用 "x-app-id"
+	values := md.Get("x-app-id")
+	if len(values) > 0 && values[0] != "" {
+		return strings.TrimSpace(values[0])
 	}
 
 	return ""
