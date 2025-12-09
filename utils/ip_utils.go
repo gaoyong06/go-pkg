@@ -21,15 +21,27 @@ func GetClientIP(ctx context.Context) string {
 }
 
 // IsValidPublicIP 验证IP地址是否为有效的公网IP
-// 排除私有IP和本地IP
+// 排除私有IP、本地IP、未指定地址和组播地址
+// 使用 net.ParseIP 和 net.IP 的标准方法进行完整的 IP 地址验证
 func IsValidPublicIP(ip string) bool {
-	parsedIP := net.ParseIP(ip)
-	if parsedIP == nil {
+	if ip == "" {
 		return false
 	}
 
-	// 排除私有IP和本地IP
-	if parsedIP.IsLoopback() || parsedIP.IsLinkLocalUnicast() || parsedIP.IsLinkLocalMulticast() {
+	// 解析 IP 地址
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		// 如果无法解析，可能是无效的 IP 地址，返回 false
+		return false
+	}
+
+	// 排除本地回环地址
+	if parsedIP.IsLoopback() {
+		return false
+	}
+
+	// 排除链路本地地址（IPv4 和 IPv6）
+	if parsedIP.IsLinkLocalUnicast() || parsedIP.IsLinkLocalMulticast() {
 		return false
 	}
 
@@ -38,6 +50,17 @@ func IsValidPublicIP(ip string) bool {
 		return false
 	}
 
+	// 排除未指定地址（0.0.0.0 和 ::）
+	if parsedIP.IsUnspecified() {
+		return false
+	}
+
+	// 排除组播地址
+	if parsedIP.IsMulticast() {
+		return false
+	}
+
+	// 如果通过了所有检查，认为是有效的公网 IP
 	return true
 }
 
