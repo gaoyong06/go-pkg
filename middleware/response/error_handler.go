@@ -1,6 +1,7 @@
 package response
 
 import (
+	"errors"
 	"fmt"
 
 	kratosErrors "github.com/go-kratos/kratos/v2/errors"
@@ -69,11 +70,12 @@ func (h *DefaultErrorHandler) GetHTTPStatusCode(err error) int {
 
 // GetErrorMessage 获取错误消息
 func (h *DefaultErrorHandler) GetErrorMessage(err error, includeDetailed bool) string {
-	if e, ok := err.(*kratosErrors.Error); ok {
+	var kratosErr *kratosErrors.Error
+	if errors.As(err, &kratosErr) {
 		if includeDetailed {
-			return fmt.Sprintf("%s (详细错误: %s)", e.Message, e.Error())
+			return fmt.Sprintf("%s (详细错误: %s)", kratosErr.Message, kratosErr.Error())
 		}
-		return e.Message
+		return kratosErr.Message
 	}
 
 	if includeDetailed {
@@ -111,16 +113,18 @@ func (h *DefaultErrorHandler) GetErrorShowType(err error) int {
 
 // GetErrorCode 获取错误代码
 func (h *DefaultErrorHandler) GetErrorCode(err error) string {
-	if e, ok := err.(*kratosErrors.Error); ok {
-		return fmt.Sprintf("%d", e.Code)
+	var kratosErr *kratosErrors.Error
+	if errors.As(err, &kratosErr) {
+		return fmt.Sprintf("%d", kratosErr.Code)
 	}
 	return "UNKNOWN_ERROR"
 }
 
 // extractErrorCode 从错误中提取错误码
 func extractErrorCode(err error) (int, bool) {
-	if e, ok := err.(*kratosErrors.Error); ok {
-		return int(e.Code), true
+	var kratosErr *kratosErrors.Error
+	if errors.As(err, &kratosErr) {
+		return int(kratosErr.Code), true
 	}
 	return 0, false
 }
