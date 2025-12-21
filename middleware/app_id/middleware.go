@@ -8,6 +8,7 @@ import (
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/middleware"
 	"github.com/go-kratos/kratos/v2/transport"
+	kratoshttp "github.com/go-kratos/kratos/v2/transport/http"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -35,7 +36,8 @@ func Middleware() middleware.Middleware {
 // extractAppID 从请求中提取 appId
 // 优先级：
 // 1. HTTP Header X-App-Id（由 API Gateway 统一设置）
-// 2. gRPC metadata X-App-Id（服务间调用时传递）
+// 2. Query String appId（前端通过 Query String 传递，作为后备方案）
+// 3. gRPC metadata X-App-Id（服务间调用时传递）
 func extractAppID(ctx context.Context) string {
 	tr, ok := transport.FromServerContext(ctx)
 	if !ok {
@@ -79,7 +81,19 @@ func extractAppID(ctx context.Context) string {
 		}
 	}
 
-	// 2. 从 gRPC metadata 提取 X-App-Id（服务间调用时传递）
+	// 2. 从 Query String 提取 appId（作为后备方案，用于直接访问服务的情况）
+	if httpTr, ok := tr.(*kratoshttp.Transport); ok {
+		if req := httpTr.Request(); req != nil {
+			if reqURL := req.URL; reqURL != nil {
+				if appID := reqURL.Query().Get("appId"); appID != "" {
+					log.NewHelper(log.GetLogger()).Infof("app_id middleware: found appId in query string: %s", appID)
+					return strings.TrimSpace(appID)
+				}
+			}
+		}
+	}
+
+	// 3. 从 gRPC metadata 提取 X-App-Id（服务间调用时传递）
 	return extractAppIDFromGRPCMetadata(ctx)
 }
 
