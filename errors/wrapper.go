@@ -3,9 +3,13 @@ package errors
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"sync"
 
 	kratosErrors "github.com/go-kratos/kratos/v2/errors"
+	"google.golang.org/grpc/status"
 )
 
 // ErrorManager 错误管理器，提供错误创建和包装功能
@@ -60,8 +64,67 @@ func (m *ErrorManager) WrapError(err error, code int32, lang string) *kratosErro
 	if lang == "" {
 		lang = "zh-CN"
 	}
-	message := m.messageLoader.GetMessage(lang, code)
-	return kratosErrors.New(int(code), "BIZ_ERROR", message)
+	baseMessage := m.messageLoader.GetMessage(lang, code)
+
+	// 提取 gRPC 错误信息（如果存在）
+	grpcMessage := extractGRPCErrorMessage(err)
+
+	// 如果存在 gRPC 错误信息，且与基础消息不同，则合并
+	if grpcMessage != "" && grpcMessage != baseMessage && !strings.Contains(baseMessage, grpcMessage) {
+		message := fmt.Sprintf("%s: %s", baseMessage, grpcMessage)
+		return kratosErrors.New(int(code), "BIZ_ERROR", message)
+	}
+
+	return kratosErrors.New(int(code), "BIZ_ERROR", baseMessage)
+}
+
+// extractGRPCErrorMessage 从错误中提取 gRPC 状态错误信息
+func extractGRPCErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	// 首先尝试直接从错误中提取 gRPC 状态
+	if st, ok := status.FromError(err); ok {
+		return st.Message()
+	}
+
+	// 如果直接提取失败，尝试从错误链中提取
+	// 使用 errors.Unwrap 遍历错误链
+	currentErr := err
+	for {
+		if st, ok := status.FromError(currentErr); ok {
+			return st.Message()
+		}
+
+		// 尝试 unwrap
+		if unwrapped := unwrapError(currentErr); unwrapped != nil && unwrapped != currentErr {
+			currentErr = unwrapped
+		} else {
+			break
+		}
+	}
+
+	return ""
+}
+
+// unwrapError 尝试 unwrap 错误（兼容 errors.Unwrap 和自定义 Unwrap 方法）
+func unwrapError(err error) error {
+	// 使用标准库的 errors.Unwrap
+	if unwrapped := errors.Unwrap(err); unwrapped != nil {
+		return unwrapped
+	}
+
+	// 兼容自定义 Unwrap 方法
+	type unwrapper interface {
+		Unwrap() error
+	}
+
+	if u, ok := err.(unwrapper); ok {
+		return u.Unwrap()
+	}
+
+	return nil
 }
 
 // WrapErrorWithLang 从 context 中获取语言并包装错误

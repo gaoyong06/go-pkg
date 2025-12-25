@@ -9,7 +9,7 @@ import (
 
 // DefaultErrorHandler 实现 ErrorHandler 接口，提供通用的错误处理逻辑
 type DefaultErrorHandler struct {
-	statusMapping  map[int]int
+	statusMapping   map[int]int
 	showTypeMapping map[int]int
 }
 
@@ -37,7 +37,7 @@ func WithShowTypeMapping(mapping map[int]int) HandlerOption {
 // NewDefaultErrorHandler 创建默认的错误处理器
 func NewDefaultErrorHandler(opts ...HandlerOption) ErrorHandler {
 	handler := &DefaultErrorHandler{
-		statusMapping:  make(map[int]int),
+		statusMapping:   make(map[int]int),
 		showTypeMapping: make(map[int]int),
 	}
 
@@ -72,9 +72,9 @@ func (h *DefaultErrorHandler) GetHTTPStatusCode(err error) int {
 func (h *DefaultErrorHandler) GetErrorMessage(err error, includeDetailed bool) string {
 	var kratosErr *kratosErrors.Error
 	if errors.As(err, &kratosErr) {
-		if includeDetailed {
-			return fmt.Sprintf("%s (详细错误: %s)", kratosErr.Message, kratosErr.Error())
-		}
+		// 由于 WrapError 已经在包装时提取并合并了 gRPC 错误信息到 message 中
+		// 这里直接返回 kratos error 的 message 即可
+		// 对于需要详细信息的场景，message 中已经包含了 gRPC 错误信息
 		return kratosErr.Message
 	}
 
@@ -128,4 +128,3 @@ func extractErrorCode(err error) (int, bool) {
 	}
 	return 0, false
 }
-
