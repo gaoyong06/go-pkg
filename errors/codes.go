@@ -27,7 +27,8 @@ package errors
 //   17: API Key 服务 (api-key-service)
 //   18: 资产服务 (asset-service)
 //   19: 计费服务 (billing-service)
-//   20-99: 预留其他服务
+//   20: 表单服务 (form-service)
+//   21-99: 预留其他服务
 //
 // 模块标识建议：
 //   00: 参数校验、通用校验
