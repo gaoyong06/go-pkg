@@ -7,8 +7,8 @@ toolchain go1.24.10
 require (
 	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/go-kratos/kratos/v2 v2.9.2
-	github.com/go-redis/redis/v8 v8.11.5
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
+	github.com/redis/go-redis/v9 v9.17.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/text v0.32.0
 	google.golang.org/grpc v1.77.0
@@ -21,7 +21,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
+	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
 	github.com/go-kratos/aegis v0.2.0 // indirect
 	github.com/go-playground/assert/v2 v2.2.0 // indirect
 	github.com/go-playground/form/v4 v4.2.1 // indirect
@@ -33,6 +33,7 @@ require (
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20251022142026-3a174f9686a8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251022142026-3a174f9686a8 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
