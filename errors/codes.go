@@ -29,7 +29,8 @@ package errors
 //   19: 计费服务 (billing-service)
 //   20: 表单服务 (form-service)
 //   21: 结算服务 (settlement-service)
-//   22-99: 预留其他服务
+//   22: 实时数据流服务 (realtime-data-stream-service)
+//   23-99: 预留其他服务
 //
 // 模块标识建议：
 //   00: 参数校验、通用校验
