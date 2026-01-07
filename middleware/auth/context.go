@@ -43,7 +43,3 @@ func GetUserRoleFromContext(ctx context.Context) string {
 	}
 	return claims.Role
 }
-
-
-
-

@@ -139,7 +139,3 @@ func RequireRole(requiredRole string, validator *PassportTokenValidator, config 
 		}
 	}
 }
-
-
-
-
