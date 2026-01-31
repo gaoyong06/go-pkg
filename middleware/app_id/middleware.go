@@ -105,6 +105,9 @@ func extractAppIDFromGRPCMetadata(ctx context.Context) string {
 		return ""
 	}
 
+	// Debug: print all metadata keys
+	log.NewHelper(log.GetLogger()).Infof("app_id middleware: gRPC metadata keys: %v", md)
+
 	// gRPC metadata 的 key 会被转换为小写，所以使用 "x-app-id"
 	values := md.Get("x-app-id")
 	if len(values) > 0 && values[0] != "" {
