@@ -22,11 +22,11 @@ func Middleware() middleware.Middleware {
 			appID := extractAppID(ctx)
 			if appID != "" {
 				ctx = WithAppID(ctx, appID)
-				// 调试日志：记录成功提取的 appId（使用 Info 级别，确保在 info 日志级别下也能看到）
-				log.NewHelper(log.GetLogger()).Infof("app_id middleware: extracted appId=%s", appID)
+				// 调试日志：记录成功提取的 appId
+				log.NewHelper(log.GetLogger()).Debugf("app_id middleware: extracted appId=%s", appID)
 			} else {
-				// 调试日志：记录未找到 appId 的情况（使用 Info 级别，确保在 info 日志级别下也能看到）
-				log.NewHelper(log.GetLogger()).Infof("app_id middleware: no appId found in headers or metadata")
+				// 调试日志：记录未找到 appId 的情况
+				log.NewHelper(log.GetLogger()).Debugf("app_id middleware: no appId found in headers or metadata")
 			}
 			return handler(ctx, req)
 		}

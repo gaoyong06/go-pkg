@@ -1,26 +1,33 @@
 package logger
 
+// Package logger 提供基于 Kratos 框架的统一日志处理功能。
+// 注意：本包专为 Kratos 微服务设计，依赖 Kratos 的 log 接口。
+// 对于非 Kratos 项目（如 Gin 框架的 schedule_manager），请勿使用本包，
+// 应直接在项目内部实现日志逻辑，以避免不必要的依赖和复杂度。
+
 import (
-	"io"
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/go-kratos/kratos/v2/log"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
-// Config 定义日志配置
-// 该结构与业务 proto 解耦，可在不同项目中复用
+// Config 日志配置结构体
+// 调用者需将具体的配置对象映射到此结构体
 type Config struct {
-	Level         string
-	Format        string
-	Output        string
-	FilePath      string
-	MaxSize       int
-	MaxAge        int
-	MaxBackups    int
-	Compress      bool
-	EnableConsole bool
+	Level         string // 日志级别: debug, info, warn, error
+	Format        string // 日志格式: json, text
+	Output        string // 输出位置: stdout, stderr, file, both
+	FilePath      string // 日志文件路径 (当 Output 为 file 或 both 时有效)
+	MaxSize       int    // 单个日志文件最大大小 (MB)
+	MaxAge        int    // 日志文件保留天数
+	MaxBackups    int    // 日志文件最大备份数量
+	Compress      bool   // 是否压缩旧日志
+	EnableConsole bool   // 是否同时输出到控制台 (辅助字段，通常由 Output 决定)
 }
 
 const (
@@ -32,138 +39,184 @@ const (
 	defaultMaxBackups = 10
 )
 
-// multiWriter 实现 io.Writer 接口，同时写入多个目标
-type multiWriter struct {
-	writers []io.Writer
+// InitLogger 初始化日志记录器 (Kratos 专用)
+// 设计原则：简单至上，仅满足 Kratos 微服务的标准日志需求
+//
+// 参数:
+//
+//	c: 日志配置对象 (如果为 nil，将使用默认配置)
+//	id, name, version: 服务标识信息
+//
+// 返回:
+//
+//	log.Logger: 初始化后的日志记录器
+//	string: 日志文件路径 (供启动日志使用)
+func InitLogger(c *Config, id, name, version string) (log.Logger, string) {
+	// 1. 应用默认值
+	conf := applyDefaults(c)
+
+	// 2. 创建 Logger (Zap 实现)
+	loggerInstance := newLogger(conf)
+
+	// 3. 添加基本字段
+	// 注意: 我们保留 Kratos 的 DefaultTimestamp 和 DefaultCaller 中间件
+	// 因此在 Zap 配置中禁用了内置的时间和 Caller，避免重复
+	return log.With(loggerInstance,
+		"ts", log.DefaultTimestamp,
+		"caller", log.DefaultCaller,
+		"service.id", id,
+		"service.name", name,
+		"service.version", version,
+	), conf.FilePath
 }
 
-func (mw *multiWriter) Write(p []byte) (n int, err error) {
-	for _, w := range mw.writers {
-		n, err = w.Write(p)
-		if err != nil {
-			return
+// ZapLogger 适配 Kratos 的 Logger 接口
+type ZapLogger struct {
+	log *zap.Logger
+}
+
+// Log 实现 log.Logger 接口
+func (l *ZapLogger) Log(level log.Level, keyvals ...interface{}) error {
+	if len(keyvals) == 0 {
+		return nil
+	}
+	if len(keyvals)%2 != 0 {
+		keyvals = append(keyvals, "")
+	}
+
+	var msg string
+	fields := make([]zap.Field, 0, len(keyvals)/2)
+
+	for i := 0; i < len(keyvals); i += 2 {
+		key := fmt.Sprintf("%v", keyvals[i])
+		// 提取 msg 字段作为 Zap 的主消息
+		if key == "msg" {
+			msg = fmt.Sprintf("%v", keyvals[i+1])
+			continue
+		}
+		fields = append(fields, zap.Any(key, keyvals[i+1]))
+	}
+
+	switch level {
+	case log.LevelDebug:
+		l.log.Debug(msg, fields...)
+	case log.LevelInfo:
+		l.log.Info(msg, fields...)
+	case log.LevelWarn:
+		l.log.Warn(msg, fields...)
+	case log.LevelError:
+		l.log.Error(msg, fields...)
+	case log.LevelFatal:
+		l.log.Fatal(msg, fields...)
+	}
+	return nil
+}
+
+// Sync 同步缓冲区
+func (l *ZapLogger) Sync() error {
+	return l.log.Sync()
+}
+
+// ======================================== private method ========================================
+func applyDefaults(c *Config) *Config {
+	if c == nil {
+		return &Config{
+			Output:     defaultOutput,
+			FilePath:   defaultFilePath,
+			Format:     defaultFormat,
+			MaxSize:    defaultMaxSize,
+			MaxAge:     defaultMaxAge,
+			MaxBackups: defaultMaxBackups,
+			Compress:   true,
 		}
 	}
-	return len(p), nil
+
+	// 复制一份配置，避免修改原对象
+	conf := *c
+
+	if conf.Output == "" {
+		conf.Output = defaultOutput
+	}
+	if conf.FilePath == "" {
+		conf.FilePath = defaultFilePath
+	}
+	if conf.Format == "" {
+		conf.Format = defaultFormat
+	}
+	if conf.MaxSize == 0 {
+		conf.MaxSize = defaultMaxSize
+	}
+	if conf.MaxAge == 0 {
+		conf.MaxAge = defaultMaxAge
+	}
+	if conf.MaxBackups == 0 {
+		conf.MaxBackups = defaultMaxBackups
+	}
+	return &conf
 }
 
-// NewLogger 根据配置创建日志记录器
-func NewLogger(cfg *Config) log.Logger {
-	conf := applyDefaults(cfg)
+// newLogger 根据配置创建日志记录器 (私有方法)
+func newLogger(conf *Config) log.Logger {
+	// 1. 配置 WriteSyncer (输出位置)
+	var writeSyncer zapcore.WriteSyncer
 
-	var logger log.Logger
+	// 确保日志目录存在
+	if conf.Output == "file" || conf.Output == "both" {
+		logDir := filepath.Dir(conf.FilePath)
+		_ = os.MkdirAll(logDir, 0o755)
+	}
+
+	fileWriter := &lumberjack.Logger{
+		Filename:   conf.FilePath,
+		MaxSize:    conf.MaxSize,
+		MaxAge:     conf.MaxAge,
+		MaxBackups: conf.MaxBackups,
+		Compress:   conf.Compress,
+	}
 
 	switch conf.Output {
 	case "file":
-		logger = createFileLogger(&conf)
+		writeSyncer = zapcore.AddSync(fileWriter)
 	case "stderr":
-		logger = log.NewStdLogger(os.Stderr)
+		writeSyncer = zapcore.AddSync(os.Stderr)
 	case "stdout":
-		logger = log.NewStdLogger(os.Stdout)
+		writeSyncer = zapcore.AddSync(os.Stdout)
 	case "both":
-		logger = createMultiLogger(conf.FilePath, true, &conf)
+		writeSyncer = zapcore.NewMultiWriteSyncer(zapcore.AddSync(fileWriter), zapcore.AddSync(os.Stdout))
 	default:
-		logger = log.NewStdLogger(os.Stdout)
+		writeSyncer = zapcore.AddSync(os.Stdout)
 	}
 
-	if conf.EnableConsole && conf.Output != "both" && conf.Output != "stdout" {
-		logger = createMultiLogger(conf.FilePath, true, &conf)
+	// 2. 配置 Encoder (日志格式)
+	encoderConfig := zap.NewProductionEncoderConfig()
+	// 使用 ISO8601 时间格式 (虽然我们下面禁用了 TimeKey，但保留此配置以防未来启用)
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	// 禁用 Zap 自带的 TimeKey 和 CallerKey，因为 Kratos 中间件已经提供了 "ts" 和 "caller"
+	// 这样可以避免日志中出现重复字段
+	encoderConfig.TimeKey = ""
+	encoderConfig.CallerKey = ""
+
+	var encoder zapcore.Encoder
+	if conf.Format == "json" {
+		encoder = zapcore.NewJSONEncoder(encoderConfig)
+	} else {
+		// Console 格式适合开发环境
+		encoder = zapcore.NewConsoleEncoder(encoderConfig)
 	}
 
-	return formatLogger(logger, conf.Format)
-}
-
-// NewHelper 创建日志助手
-func NewHelper(cfg *Config) *log.Helper {
-	return log.NewHelper(NewLogger(cfg))
-}
-
-func applyDefaults(cfg *Config) Config {
-	if cfg == nil {
-		return Config{
-			Output:        defaultOutput,
-			FilePath:      defaultFilePath,
-			Format:        defaultFormat,
-			MaxSize:       defaultMaxSize,
-			MaxAge:        defaultMaxAge,
-			MaxBackups:    defaultMaxBackups,
-			Compress:      true,
-			EnableConsole: true,
+	// 3. 配置 Level (日志级别)
+	var zapLevel zapcore.Level
+	if conf.Level == "" {
+		zapLevel = zapcore.InfoLevel
+	} else {
+		if err := zapLevel.UnmarshalText([]byte(conf.Level)); err != nil {
+			zapLevel = zapcore.InfoLevel
 		}
 	}
 
-	c := *cfg
-	if c.Output == "" {
-		c.Output = defaultOutput
-	}
-	if c.FilePath == "" {
-		c.FilePath = defaultFilePath
-	}
-	if c.Format == "" {
-		c.Format = defaultFormat
-	}
-	if c.MaxSize == 0 {
-		c.MaxSize = defaultMaxSize
-	}
-	if c.MaxAge == 0 {
-		c.MaxAge = defaultMaxAge
-	}
-	if c.MaxBackups == 0 {
-		c.MaxBackups = defaultMaxBackups
-	}
-	return c
-}
+	// 4. 创建 Core 和 Logger
+	core := zapcore.NewCore(encoder, writeSyncer, zapLevel)
+	zapLog := zap.New(core)
 
-func createFileLogger(cfg *Config) log.Logger {
-	logDir := filepath.Dir(cfg.FilePath)
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return log.NewStdLogger(os.Stdout)
-	}
-
-	fileWriter := &lumberjack.Logger{
-		Filename:   cfg.FilePath,
-		MaxSize:    cfg.MaxSize,
-		MaxAge:     cfg.MaxAge,
-		MaxBackups: cfg.MaxBackups,
-		Compress:   cfg.Compress,
-	}
-
-	return log.NewStdLogger(fileWriter)
-}
-
-func createMultiLogger(filePath string, enableConsole bool, cfg *Config) log.Logger {
-	logDir := filepath.Dir(filePath)
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return log.NewStdLogger(os.Stdout)
-	}
-
-	fileWriter := &lumberjack.Logger{
-		Filename:   filePath,
-		MaxSize:    cfg.MaxSize,
-		MaxAge:     cfg.MaxAge,
-		MaxBackups: cfg.MaxBackups,
-		Compress:   cfg.Compress,
-	}
-
-	if enableConsole {
-		multi := &multiWriter{writers: []io.Writer{fileWriter, os.Stdout}}
-		return log.NewStdLogger(multi)
-	}
-
-	return log.NewStdLogger(fileWriter)
-}
-
-func formatLogger(logger log.Logger, format string) log.Logger {
-	switch format {
-	case "json":
-		return log.With(logger,
-			"ts", log.DefaultTimestamp,
-			"caller", log.DefaultCaller,
-		)
-	default:
-		return log.With(logger,
-			"ts", log.DefaultTimestamp,
-			"caller", log.DefaultCaller,
-		)
-	}
+	return &ZapLogger{log: zapLog}
 }
