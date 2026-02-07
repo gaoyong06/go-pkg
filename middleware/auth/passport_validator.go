@@ -9,6 +9,7 @@ import (
 	passportv1 "passport-service/api/passport/v1"
 
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/go-kratos/kratos/v2/middleware/recovery"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 )
 
@@ -30,6 +31,9 @@ func NewPassportTokenValidator(grpcAddr string, timeout time.Duration, logger lo
 		context.Background(),
 		grpc.WithEndpoint(grpcAddr),
 		grpc.WithTimeout(timeout),
+		grpc.WithMiddleware(
+			recovery.Recovery(),
+		),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial passport-service: %w", err)
@@ -67,4 +71,3 @@ func (v *PassportTokenValidator) ValidateToken(ctx context.Context, token string
 		Role:   resp.Role,
 	}, nil
 }
-
