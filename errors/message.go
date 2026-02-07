@@ -31,6 +31,20 @@ func NewJSONErrorMessageLoader(configDir string) ErrorMessageLoader {
 	}
 }
 
+// defaultMessages 常见错误码的默认文案（i18n 未加载或未配置时使用，便于排查）
+var defaultMessages = map[int32]string{
+	110501: "无效的 Token（未提供或无效的登录凭证，请重新登录）",
+	110502: "Token 已失效（请重新登录）",
+}
+
+// getDefaultMessage 返回错误码的默认描述文案，便于问题排查
+func getDefaultMessage(code int32) string {
+	if msg, ok := defaultMessages[code]; ok {
+		return msg
+	}
+	return fmt.Sprintf("错误码 %d（未找到对应文案，请检查服务 i18n 配置或联系开发）", code)
+}
+
 // GetMessage 获取错误消息
 func (l *JSONErrorMessageLoader) GetMessage(lang string, code int32) string {
 	// 尝试从缓存获取
@@ -50,7 +64,7 @@ func (l *JSONErrorMessageLoader) GetMessage(lang string, code int32) string {
 		if lang != "zh-CN" {
 			return l.GetMessage("zh-CN", code)
 		}
-		return fmt.Sprintf("Unknown error (code: %d)", code)
+		return getDefaultMessage(code)
 	}
 
 	// 再次尝试从缓存获取
@@ -68,7 +82,7 @@ func (l *JSONErrorMessageLoader) GetMessage(lang string, code int32) string {
 		return l.GetMessage("zh-CN", code)
 	}
 
-	return fmt.Sprintf("Unknown error (code: %d)", code)
+	return getDefaultMessage(code)
 }
 
 // ErrorMessageConfig 错误信息配置结构
