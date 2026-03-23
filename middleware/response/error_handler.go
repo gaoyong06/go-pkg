@@ -111,7 +111,8 @@ func (h *DefaultErrorHandler) GetErrorShowType(err error) int {
 	}
 }
 
-// GetErrorCode 获取错误代码
+// GetErrorCode 获取业务错误代码
+// 返回 Kratos error 的数字错误码（与 errors.json 中的 key 对应）
 func (h *DefaultErrorHandler) GetErrorCode(err error) string {
 	var kratosErr *kratosErrors.Error
 	if errors.As(err, &kratosErr) {
