@@ -54,26 +54,6 @@ func extractUserID(ctx context.Context) string {
 		return strings.TrimSpace(userID)
 	}
 
-	// 调试：如果 Get() 方法失败，尝试使用 map 方式（用于调试）
-	if httpTr, ok := tr.(interface {
-		RequestHeader() map[string][]string
-	}); ok {
-		headers := httpTr.RequestHeader()
-		// 调试：打印所有 Header 键名（仅当未找到 userID 时）
-		headerKeys := make([]string, 0, len(headers))
-		for key := range headers {
-			headerKeys = append(headerKeys, key)
-		}
-		log.NewHelper(log.GetLogger()).Infof("user_id middleware: available headers: %v", headerKeys)
-		// 遍历所有 Header 查找（处理大小写不匹配）
-		for key, values := range headers {
-			if strings.EqualFold(key, "X-End-User-Id") && len(values) > 0 && values[0] != "" {
-				log.NewHelper(log.GetLogger()).Infof("user_id middleware: found X-End-User-Id in header %s=%s", key, values[0])
-				return strings.TrimSpace(values[0])
-			}
-		}
-	}
-
 	// 2. 从 gRPC metadata 提取 X-End-User-Id（服务间调用时传递）
 	return extractUserIDFromGRPCMetadata(ctx)
 }

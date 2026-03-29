@@ -38,13 +38,12 @@ func extractDeveloperID(ctx context.Context) string {
 	}
 
 	// 1. 从 HTTP Header 提取 X-Developer-Id（标准名称，由 API Gateway 的 api-key 插件统一设置）
-	if httpTr, ok := tr.(interface {
-		RequestHeader() map[string][]string
-	}); ok {
-		headers := httpTr.RequestHeader()
-		if values, ok := headers["X-Developer-Id"]; ok && len(values) > 0 && values[0] != "" {
-			return values[0]
-		}
+	header := tr.RequestHeader()
+	if developerID := header.Get("X-Developer-Id"); developerID != "" {
+		return strings.TrimSpace(developerID)
+	}
+	if developerID := header.Get("x-developer-id"); developerID != "" {
+		return strings.TrimSpace(developerID)
 	}
 
 	// 2. 从 gRPC metadata 提取 X-Developer-Id（服务间调用时传递）

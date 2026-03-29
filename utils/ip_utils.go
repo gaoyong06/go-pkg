@@ -3,6 +3,7 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 
@@ -71,6 +72,62 @@ func IsPrivateIP(ip string) bool {
 		return false
 	}
 	return parsedIP.IsPrivate()
+}
+
+// ExtractFirstPublicIP 从字符串中提取第一个公网 IP。
+//
+// 典型场景：解析 X-Forwarded-For / X-Real-IP 等头部值。
+// 支持：
+// - 多个 IP 以逗号分隔（取第一个公网 IP）
+// - IPv6 方括号格式（如 [2001:db8::1]）
+// 返回约定：
+// - 若存在公网 IP，返回第一个公网 IP
+// - 若不存在公网 IP，但能解析出任意合法 IP，则返回第一个合法 IP
+// - 若无法解析任何 IP，则返回空字符串
+func ExtractFirstPublicIP(ipStr string) string {
+	ipStr = strings.TrimSpace(ipStr)
+	if ipStr == "" {
+		return ""
+	}
+	parts := strings.Split(ipStr, ",")
+	for _, part := range parts {
+		p := strings.TrimSpace(part)
+		p = strings.Trim(p, "[]")
+		if net.ParseIP(p) == nil {
+			continue
+		}
+		if IsValidPublicIP(p) {
+			return p
+		}
+	}
+	for _, part := range parts {
+		p := strings.TrimSpace(part)
+		p = strings.Trim(p, "[]")
+		if net.ParseIP(p) != nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// MaskIP 对 IP 做脱敏展示。
+//
+// - IPv4：保留前两段（如 1.2.*.*）
+// - IPv6：保留前 8 个字符前缀（如 2001:db8...）
+// 解析失败时返回空字符串。
+func MaskIP(ipStr string) string {
+	ip := net.ParseIP(strings.TrimSpace(ipStr))
+	if ip == nil {
+		return ""
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return fmt.Sprintf("%d.%d.*.*", v4[0], v4[1])
+	}
+	s := ip.String()
+	if len(s) <= 8 {
+		return s
+	}
+	return s[:8] + "..."
 }
 
 // =========================================== private functions ===========================================

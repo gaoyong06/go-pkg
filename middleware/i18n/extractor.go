@@ -24,15 +24,10 @@ func extractLanguage(ctx context.Context) string {
 	}
 
 	// 2. 从 HTTP Header 提取
-	if httpTr, ok := tr.(interface {
-		RequestHeader() map[string][]string
-	}); ok {
-		headers := httpTr.RequestHeader()
-		if acceptLang, ok := headers["Accept-Language"]; ok && len(acceptLang) > 0 {
-			lang := parseAcceptLanguage(acceptLang[0])
-			if lang != "" {
-				return lang
-			}
+	if acceptLang := strings.TrimSpace(tr.RequestHeader().Get("Accept-Language")); acceptLang != "" {
+		lang := parseAcceptLanguage(acceptLang)
+		if lang != "" {
+			return lang
 		}
 	}
 
@@ -53,4 +48,3 @@ func parseAcceptLanguage(acceptLang string) string {
 	}
 	return ""
 }
-

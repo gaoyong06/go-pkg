@@ -56,31 +56,6 @@ func extractAppID(ctx context.Context) string {
 		return strings.TrimSpace(appID)
 	}
 
-	// 调试：如果 Get() 方法失败，尝试使用 map 方式（用于调试）
-	if httpTr, ok := tr.(interface {
-		RequestHeader() map[string][]string
-	}); ok {
-		headers := httpTr.RequestHeader()
-		// 调试：打印所有 Header 键名和值
-		headerKeys := make([]string, 0, len(headers))
-		headerValues := make(map[string]string)
-		for key, values := range headers {
-			headerKeys = append(headerKeys, key)
-			if len(values) > 0 {
-				headerValues[key] = values[0]
-			}
-		}
-		log.NewHelper(log.GetLogger()).Infof("app_id middleware: available headers: %v", headerKeys)
-		log.NewHelper(log.GetLogger()).Infof("app_id middleware: header values: %v", headerValues)
-		// 遍历所有 Header 查找（处理大小写不匹配）
-		for key, values := range headers {
-			if strings.EqualFold(key, "X-App-Id") && len(values) > 0 && values[0] != "" {
-				log.NewHelper(log.GetLogger()).Infof("app_id middleware: found X-App-Id in header %s=%s", key, values[0])
-				return strings.TrimSpace(values[0])
-			}
-		}
-	}
-
 	// 2. 从 Query String 提取 appId（作为后备方案，用于直接访问服务的情况）
 	if httpTr, ok := tr.(*kratoshttp.Transport); ok {
 		if req := httpTr.Request(); req != nil {

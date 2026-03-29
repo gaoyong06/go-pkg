@@ -31,33 +31,17 @@ func Middleware(validator *PassportTokenValidator, config *Config, logger log.Lo
 
 			// 从 transport 中获取 token
 			if ok {
-				var authHeader string
-
-				// 尝试从 HTTP header 中获取 token
-				if httpTr, ok := tr.(interface {
-					RequestHeader() map[string][]string
-				}); ok {
-					headers := httpTr.RequestHeader()
-					if authHeaders, ok := headers["Authorization"]; ok && len(authHeaders) > 0 {
-						authHeader = authHeaders[0]
-					}
-					// 如果没有 Authorization header，尝试从 Cookie 中获取
-					if authHeader == "" {
-						if cookies, ok := headers["Cookie"]; ok && len(cookies) > 0 {
-							// 解析 Cookie header
-							for _, cookieStr := range cookies {
-								parts := strings.Split(cookieStr, ";")
-								for _, part := range parts {
-									part = strings.TrimSpace(part)
-									if strings.HasPrefix(part, "access_token=") {
-										tokenValue := strings.TrimPrefix(part, "access_token=")
-										authHeader = "Bearer " + tokenValue
-										break
-									}
-								}
-								if authHeader != "" {
-									break
-								}
+				authHeader := strings.TrimSpace(tr.RequestHeader().Get("Authorization"))
+				if authHeader == "" {
+					cookieHeader := strings.TrimSpace(tr.RequestHeader().Get("Cookie"))
+					if cookieHeader != "" {
+						parts := strings.Split(cookieHeader, ";")
+						for _, part := range parts {
+							part = strings.TrimSpace(part)
+							if strings.HasPrefix(part, "access_token=") {
+								tokenValue := strings.TrimPrefix(part, "access_token=")
+								authHeader = "Bearer " + tokenValue
+								break
 							}
 						}
 					}
@@ -139,8 +123,3 @@ func RequireRole(requiredRole string, validator *PassportTokenValidator, config 
 		}
 	}
 }
-
-
-
-
-
