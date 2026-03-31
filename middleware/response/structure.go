@@ -26,4 +26,3 @@ const (
 	// ShowTypeRedirect 页面跳转
 	ShowTypeRedirect = 9
 )
-

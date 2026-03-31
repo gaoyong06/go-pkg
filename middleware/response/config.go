@@ -38,4 +38,3 @@ func (c *Config) ShouldSkipPath(path string) bool {
 
 	return false
 }
-

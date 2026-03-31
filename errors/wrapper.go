@@ -147,6 +147,49 @@ var (
 	globalErrorManagerOnce sync.Once
 )
 
+var (
+	httpStatusMappingMu        sync.RWMutex
+	httpStatusMappingByService = make(map[string]map[int]int)
+)
+
+// RegisterHTTPStatusMapping 注册服务的 HTTP 状态码映射
+// 用途：根据服务名称注册对应的 HTTP 状态码映射
+// 例如：RegisterHTTPStatusMapping("service1", map[int]int{10000: 200, 10001: 400})
+func RegisterHTTPStatusMapping(serviceName string, mapping map[int]int) {
+	if serviceName == "" || len(mapping) == 0 {
+		return
+	}
+
+	copied := make(map[int]int, len(mapping))
+	for code, status := range mapping {
+		copied[code] = status
+	}
+
+	httpStatusMappingMu.Lock()
+	httpStatusMappingByService[serviceName] = copied
+	httpStatusMappingMu.Unlock()
+}
+
+// GetHTTPStatusMapping 获取服务的 HTTP 状态码映射
+func GetHTTPStatusMapping(serviceName string) map[int]int {
+	if serviceName == "" {
+		return nil
+	}
+
+	httpStatusMappingMu.RLock()
+	mapping, ok := httpStatusMappingByService[serviceName]
+	httpStatusMappingMu.RUnlock()
+	if !ok || len(mapping) == 0 {
+		return nil
+	}
+
+	copied := make(map[int]int, len(mapping))
+	for code, status := range mapping {
+		copied[code] = status
+	}
+	return copied
+}
+
 // InitGlobalErrorManager 初始化全局错误管理器
 // configDir: i18n 配置目录，例如 "i18n"
 // langGetter: 从 context 获取语言的函数，如果为 nil，使用默认实现

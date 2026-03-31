@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	pkgErrors "github.com/gaoyong06/go-pkg/errors"
 	kratosErrors "github.com/go-kratos/kratos/v2/errors"
 )
 
@@ -34,11 +35,26 @@ func WithShowTypeMapping(mapping map[int]int) HandlerOption {
 	}
 }
 
+// WithServiceHTTPStatusMapping 设置服务的 HTTP 状态码映射
+// 用途：根据服务名称获取对应的 HTTP 状态码映射
+func WithServiceHTTPStatusMapping(serviceName string) HandlerOption {
+	return func(h *DefaultErrorHandler) {
+		mapping := pkgErrors.GetHTTPStatusMapping(serviceName)
+		for code, status := range mapping {
+			h.statusMapping[code] = status
+		}
+	}
+}
+
 // NewDefaultErrorHandler 创建默认的错误处理器
 func NewDefaultErrorHandler(opts ...HandlerOption) ErrorHandler {
 	handler := &DefaultErrorHandler{
 		statusMapping:   make(map[int]int),
 		showTypeMapping: make(map[int]int),
+	}
+
+	for code, status := range pkgErrors.DefaultHTTPStatusMapping() {
+		handler.statusMapping[code] = status
 	}
 
 	for _, opt := range opts {

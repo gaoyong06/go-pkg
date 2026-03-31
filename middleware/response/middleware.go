@@ -7,6 +7,7 @@ import (
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/middleware"
 	"github.com/go-kratos/kratos/v2/transport"
+	kratoshttp "github.com/go-kratos/kratos/v2/transport/http"
 )
 
 // Middleware 统一响应格式中间件
@@ -21,7 +22,7 @@ func Middleware(config *Config, errorHandler ErrorHandler, logger log.Logger) mi
 			// 获取传输信息
 			tr, ok := transport.FromServerContext(ctx)
 			if !ok {
-				logHelper.Debug("无法获取传输信息")
+				logHelper.Debug("Failed to get transport from context")
 			}
 
 			// 检查是否应该跳过统一响应格式
@@ -49,25 +50,15 @@ func Middleware(config *Config, errorHandler ErrorHandler, logger log.Logger) mi
 			// 获取主机信息
 			host := ""
 			if config.IncludeHost {
-				// 使用 ResponseEncoder 方式时，主机信息将在 HTTP 层处理
-				// 这里暂时使用默认值
-				host = "api-server" // 可配置的服务标识
+				if ht, ok := tr.(*kratoshttp.Transport); ok && ht.Request() != nil {
+					host = ht.Request().Host
+				}
 			}
 
 			// 如果有错误，统一处理错误响应
 			if err != nil {
-				errorResponse := &ResponseStructure{
-					Success:      false,
-					Data:         nil,
-					ErrorCode:    errorHandler.GetErrorCode(err),
-					ErrorMessage: errorHandler.GetErrorMessage(err, config.IncludeDetailedError),
-					ShowType:     errorHandler.GetErrorShowType(err),
-					TraceId:      traceId,
-					Host:         host,
-				}
-
-				logHelper.Errorf("API错误: %v, TraceId: %s", err, traceId)
-				return errorResponse, nil // 返回nil错误，让框架正常处理响应
+				logHelper.Errorf("API error: %v, TraceId: %s", err, traceId)
+				return nil, err
 			}
 
 			// 成功响应的统一格式
@@ -85,4 +76,3 @@ func Middleware(config *Config, errorHandler ErrorHandler, logger log.Logger) mi
 		}
 	}
 }
-

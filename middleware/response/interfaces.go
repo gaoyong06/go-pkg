@@ -17,4 +17,3 @@ type ErrorHandler interface {
 	// GetErrorCode 获取错误代码（字符串格式）
 	GetErrorCode(err error) string
 }
-

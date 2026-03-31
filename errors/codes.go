@@ -1,6 +1,8 @@
 // Package errors 提供通用错误码定义
 package errors
 
+import "net/http"
+
 // 错误码设计规范：
 // 格式：SSMMEE (6位数字)
 //   SS: 服务标识 (10-99)，每个服务分配一个唯一标识，最多支持 90 个服务
@@ -101,3 +103,34 @@ const (
 //     120100-120199: 支付单模块
 //     120200-120299: 退款模块
 //   其他服务以此类推，通过 SS 对齐服务、MM 对齐模块、EE 对齐错误序号
+
+// ===================== 业务错误码与http状态码映射 ========================
+
+// defaultHTTPStatusMapping 通用错误码的默认 HTTP 映射与获取函数
+var defaultHTTPStatusMapping = map[int]int{
+	ErrCodeInvalidArgument:      http.StatusBadRequest,
+	ErrCodeMissingRequiredField: http.StatusBadRequest,
+	ErrCodeInvalidFormat:        http.StatusBadRequest,
+	ErrCodeOutOfRange:           http.StatusBadRequest,
+	ErrCodeUnauthorized:         http.StatusUnauthorized,
+	ErrCodeTokenExpired:         http.StatusUnauthorized,
+	ErrCodeTokenInvalid:         http.StatusUnauthorized,
+	ErrCodeForbidden:            http.StatusForbidden,
+	ErrCodeNotFound:             http.StatusNotFound,
+	ErrCodeAlreadyExists:        http.StatusConflict,
+	ErrCodeResourceExhausted:    http.StatusTooManyRequests,
+	ErrCodeTimeout:              http.StatusGatewayTimeout,
+	ErrCodeServiceUnavailable:   http.StatusServiceUnavailable,
+	ErrCodeExternalServiceError: http.StatusBadGateway,
+	ErrCodeDatabaseError:        http.StatusInternalServerError,
+	ErrCodeInternalError:        http.StatusInternalServerError,
+}
+
+// DefaultHTTPStatusMapping 返回拷贝，避免外部修改
+func DefaultHTTPStatusMapping() map[int]int {
+	copied := make(map[int]int, len(defaultHTTPStatusMapping))
+	for code, status := range defaultHTTPStatusMapping {
+		copied[code] = status
+	}
+	return copied
+}

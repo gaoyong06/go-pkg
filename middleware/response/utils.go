@@ -4,7 +4,8 @@ package response
 import (
 	"context"
 	"strings"
-	"time"
+
+	"github.com/google/uuid"
 )
 
 // MatchPath 匹配路径（支持简单的通配符）
@@ -53,16 +54,5 @@ func SetTraceIdToContext(ctx context.Context, traceId string) context.Context {
 
 // GenerateUUID 生成简单的UUID（用于 TraceId）
 func GenerateUUID() string {
-	return time.Now().Format("20060102150405") + "-" + randomString(8)
+	return uuid.NewString()
 }
-
-// randomString 生成随机字符串
-func randomString(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = charset[time.Now().UnixNano()%int64(len(charset))]
-	}
-	return string(b)
-}
-
