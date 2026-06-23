@@ -4,11 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/apache/rocketmq-client-go/v2"
 	"github.com/apache/rocketmq-client-go/v2/consumer"
 	"github.com/apache/rocketmq-client-go/v2/primitive"
 	"github.com/go-kratos/kratos/v2/log"
+)
+
+const (
+	// 部署/重启时 NameServer 可能晚于业务进程几秒，NewConsumer 内统一重试
+	defaultConsumerMaxAttempts = 12
+	defaultConsumerRetryDelay  = 5 * time.Second
 )
 
 // Consumer RocketMQ 消息消费者
@@ -19,8 +26,41 @@ type Consumer struct {
 	log           *log.Helper
 }
 
-// NewConsumer 创建 RocketMQ 消费者；routingKeys 作为 Tag 使用，多个 Tag 用 || 连接
+// NewConsumer 创建 RocketMQ 消费者；routingKeys 作为 Tag 使用，多个 Tag 用 || 连接。
+// 连接 NameServer 失败时会按 defaultConsumerMaxAttempts 重试，供各业务 consumer 进程共用。
 func NewConsumer(nameServer []string, consumerGroup string, topic string, routingKeys []string, logger log.Logger) (*Consumer, error) {
+	logHelper := log.NewHelper(log.With(logger, "module", "mq/consumer"))
+	var lastErr error
+	for attempt := 1; attempt <= defaultConsumerMaxAttempts; attempt++ {
+		c, err := newConsumerOnce(nameServer, consumerGroup, topic, logger)
+		if err == nil {
+			if attempt > 1 {
+				logHelper.Infof(
+					"RocketMQ consumer connected on attempt %d (group=%s topic=%s)",
+					attempt,
+					consumerGroup,
+					topic,
+				)
+			}
+			return c, nil
+		}
+		lastErr = err
+		logHelper.Warnf(
+			"RocketMQ consumer connect attempt %d/%d failed (group=%s topic=%s): %v",
+			attempt,
+			defaultConsumerMaxAttempts,
+			consumerGroup,
+			topic,
+			err,
+		)
+		if attempt < defaultConsumerMaxAttempts {
+			time.Sleep(defaultConsumerRetryDelay)
+		}
+	}
+	return nil, lastErr
+}
+
+func newConsumerOnce(nameServer []string, consumerGroup string, topic string, logger log.Logger) (*Consumer, error) {
 	c, err := rocketmq.NewPushConsumer(
 		consumer.WithNsResolver(primitive.NewPassthroughResolver(nameServer)),
 		consumer.WithGroupName(consumerGroup),
