@@ -31,7 +31,7 @@ func NewResponseEncoder(errorHandler ErrorHandler, config *Config) func(http.Res
 
 		// 如果 v 为 nil（服务返回 nil, nil），返回 data 为 null 的响应
 		if v == nil {
-			traceId := GenerateUUID()
+			traceId := traceIDFromRequest(r)
 			host := r.Host
 			response := &ResponseStructure{
 				Success:      true,
@@ -75,7 +75,7 @@ func NewResponseEncoder(errorHandler ErrorHandler, config *Config) func(http.Res
 
 		// 如果是protobuf消息，包装为ResponseStructure
 		if msg, ok := v.(proto.Message); ok {
-			traceId := GenerateUUID()
+			traceId := traceIDFromRequest(r)
 			host := r.Host
 
 			// 使用protojson序列化以处理零值字段
@@ -107,7 +107,7 @@ func NewResponseEncoder(errorHandler ErrorHandler, config *Config) func(http.Res
 		}
 
 		// 其他情况，包装为ResponseStructure
-		traceId := GenerateUUID()
+		traceId := traceIDFromRequest(r)
 		host := r.Host
 
 		response := &ResponseStructure{
@@ -139,7 +139,7 @@ func NewErrorEncoder(errorHandler ErrorHandler) func(http.ResponseWriter, *http.
 		w.WriteHeader(statusCode)
 
 		// 生成错误响应
-		traceId := GenerateUUID()
+		traceId := traceIDFromRequest(r)
 		host := r.Host
 
 		response := &ResponseStructure{
@@ -154,4 +154,14 @@ func NewErrorEncoder(errorHandler ErrorHandler) func(http.ResponseWriter, *http.
 
 		json.NewEncoder(w).Encode(response)
 	}
+}
+
+func traceIDFromRequest(request *http.Request) string {
+	if traceID := GetTraceIdFromContext(request.Context()); traceID != "" {
+		return traceID
+	}
+	if traceID := request.Header.Get("X-Trace-Id"); traceID != "" {
+		return traceID
+	}
+	return GenerateUUID()
 }
