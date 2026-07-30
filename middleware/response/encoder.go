@@ -4,10 +4,37 @@ package response
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
+	"strings"
 
+	"github.com/go-kratos/kratos/v2/log"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
+
+// ErrorEncoderOption 配置错误编码器的可选观测能力。
+type ErrorEncoderOption func(*errorEncoderOptions)
+
+type errorEncoderOptions struct {
+	logger          *log.Helper
+	requestMetadata func(*http.Request) map[string]string
+}
+
+// WithErrorLogger 启用统一错误日志记录。
+func WithErrorLogger(logger log.Logger) ErrorEncoderOption {
+	return func(options *errorEncoderOptions) {
+		if logger != nil {
+			options.logger = log.NewHelper(logger)
+		}
+	}
+}
+
+// WithErrorRequestMetadata 添加业务服务可选的请求元数据提取器。
+func WithErrorRequestMetadata(extractor func(*http.Request) map[string]string) ErrorEncoderOption {
+	return func(options *errorEncoderOptions) {
+		options.requestMetadata = extractor
+	}
+}
 
 // NewResponseEncoder 创建响应编码器
 // errorHandler: 错误处理接口，如果为 nil，使用默认处理
@@ -126,20 +153,37 @@ func NewResponseEncoder(errorHandler ErrorHandler, config *Config) func(http.Res
 
 // NewErrorEncoder 创建错误编码器
 // errorHandler: 错误处理接口，必须提供
-func NewErrorEncoder(errorHandler ErrorHandler) func(http.ResponseWriter, *http.Request, error) {
+func NewErrorEncoder(errorHandler ErrorHandler, opts ...ErrorEncoderOption) func(http.ResponseWriter, *http.Request, error) {
 	if errorHandler == nil {
 		panic("ErrorHandler cannot be nil")
 	}
+	options := &errorEncoderOptions{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(options)
+		}
+	}
 
 	return func(w http.ResponseWriter, r *http.Request, err error) {
+		traceID := traceIDFromRequest(r)
+		w.Header().Set("X-Trace-Id", traceID)
+		if options.logger != nil {
+			metadata := map[string]string{}
+			if options.requestMetadata != nil {
+				metadata = options.requestMetadata(r)
+			}
+			options.logger.Errorf(
+				"HTTP request failed: method=%s path=%s trace_id=%s metadata=%s error=%v",
+				r.Method,
+				r.URL.Path,
+				traceID,
+				formatRequestMetadata(metadata),
+				err,
+			)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-
-		// 获取HTTP状态码
-		statusCode := errorHandler.GetHTTPStatusCode(err)
-		w.WriteHeader(statusCode)
-
-		// 生成错误响应
-		traceId := traceIDFromRequest(r)
+		w.WriteHeader(errorHandler.GetHTTPStatusCode(err))
 		host := r.Host
 
 		response := &ResponseStructure{
@@ -148,12 +192,29 @@ func NewErrorEncoder(errorHandler ErrorHandler) func(http.ResponseWriter, *http.
 			ErrorCode:    errorHandler.GetErrorCode(err),
 			ErrorMessage: errorHandler.GetErrorMessage(err, false),
 			ShowType:     errorHandler.GetErrorShowType(err),
-			TraceId:      traceId,
+			TraceId:      traceID,
 			Host:         host,
 		}
 
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}
+}
+
+func formatRequestMetadata(metadata map[string]string) string {
+	if len(metadata) == 0 {
+		return "-"
+	}
+	keys := make([]string, 0, len(metadata))
+	for key := range metadata {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		value := strings.ReplaceAll(metadata[key], " ", "_")
+		parts = append(parts, key+"="+value)
+	}
+	return strings.Join(parts, ",")
 }
 
 func traceIDFromRequest(request *http.Request) string {
