@@ -80,8 +80,8 @@ func extractAppIDFromGRPCMetadata(ctx context.Context) string {
 		return ""
 	}
 
-	// Debug: print all metadata keys
-	log.NewHelper(log.GetLogger()).Infof("app_id middleware: gRPC metadata keys: %v", md)
+	// 仅 debug：passport→notification 的 app_id 在 protobuf 请求体，不在 metadata，避免误导排障
+	log.NewHelper(log.GetLogger()).Debugf("app_id middleware: gRPC metadata keys: %v", md)
 
 	// gRPC metadata 的 key 会被转换为小写，所以使用 "x-app-id"
 	values := md.Get("x-app-id")
