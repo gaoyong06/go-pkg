@@ -17,13 +17,15 @@ type ErrorMessageLoader interface {
 
 // JSONErrorMessageLoader 从 JSON 文件加载错误消息
 type JSONErrorMessageLoader struct {
-	configDir string // i18n 配置目录，例如 "i18n"
+	configDir string                       // i18n 配置目录，例如 "i18n"
 	cache     map[string]map[string]string // lang -> code -> message
 	mutex     sync.RWMutex
 }
 
-// NewJSONErrorMessageLoader 创建 JSON 错误消息加载器
+// NewJSONErrorMessageLoader 创建旧版 JSON 错误消息加载器。
 // configDir: i18n 配置目录，例如 "i18n"
+//
+// Deprecated: 使用 NewBundleErrorMessageLoaderFromFS 加载标准 go-i18n catalog。
 func NewJSONErrorMessageLoader(configDir string) ErrorMessageLoader {
 	return &JSONErrorMessageLoader{
 		configDir: configDir,
@@ -114,4 +116,3 @@ func (l *JSONErrorMessageLoader) loadErrorMessages(lang string) error {
 
 	return nil
 }
-

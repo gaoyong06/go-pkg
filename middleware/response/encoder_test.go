@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	kratosErrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +19,29 @@ func TestTraceIDFromRequestUsesPropagatedHeader(t *testing.T) {
 	if traceID := traceIDFromRequest(request); traceID != "trace-1" {
 		t.Fatalf("trace ID = %q, want trace-1", traceID)
 	}
+}
+
+func TestNewErrorEncoderUsesRequestLocaleResolver(t *testing.T) {
+	handler := NewDefaultErrorHandler()
+	encoder := NewErrorEncoder(
+		handler,
+		WithErrorMessageResolver(func(r *http.Request, err error, _ bool) string {
+			if r.Header.Get("Accept-Language") == "zh-CN" {
+				return "本地化错误"
+			}
+			return "Localized error"
+		}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept-Language", "zh-CN")
+	resp := httptest.NewRecorder()
+	encoder(resp, req, kratosErrors.New(http.StatusBadRequest, "INVALID_ARGUMENT", "stable message"))
+
+	var body ResponseStructure
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	require.Equal(t, "本地化错误", body.ErrorMessage)
+	require.Equal(t, "Accept-Language", resp.Header().Get("Vary"))
 }
 
 func TestNewErrorEncoderKeepsTraceIDAndUsesRequestMetadata(t *testing.T) {

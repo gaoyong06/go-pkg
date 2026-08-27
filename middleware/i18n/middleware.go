@@ -7,18 +7,21 @@ import (
 	"github.com/go-kratos/kratos/v2/middleware"
 )
 
-// Middleware i18n 中间件，提取语言并存入 context
-// 语言提取优先级：
-// 1. URL 路径（如 /zh/xxx 或 /en/xxx）
-// 2. HTTP Header Accept-Language
-// 3. 默认语言 zh-CN
+// Middleware i18n 中间件，使用兼容默认 resolver 提取语言并存入 context。
 func Middleware() middleware.Middleware {
+	return MiddlewareWithResolver(defaultResolver)
+}
+
+// MiddlewareWithResolver 创建使用显式语言配置的 i18n 中间件。
+func MiddlewareWithResolver(resolver *Resolver) middleware.Middleware {
+	if resolver == nil {
+		resolver = defaultResolver
+	}
 	return func(handler middleware.Handler) middleware.Handler {
 		return func(ctx context.Context, req interface{}) (interface{}, error) {
-			lang := extractLanguage(ctx)
+			lang := extractLanguage(ctx, resolver)
 			ctx = WithLanguage(ctx, lang)
 			return handler(ctx, req)
 		}
 	}
 }
-

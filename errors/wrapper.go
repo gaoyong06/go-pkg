@@ -193,12 +193,25 @@ func GetHTTPStatusMapping(serviceName string) map[int]int {
 // InitGlobalErrorManager 初始化全局错误管理器
 // configDir: i18n 配置目录，例如 "i18n"
 // langGetter: 从 context 获取语言的函数，如果为 nil，使用默认实现
+//
+// Deprecated: 使用 InitGlobalErrorManagerWithLoader，并在服务启动阶段构造嵌入式 catalog。
 func InitGlobalErrorManager(configDir string, langGetter func(context.Context) string) {
 	globalErrorManagerOnce.Do(func() {
 		globalErrorManager = NewErrorManager(
 			NewJSONErrorMessageLoader(configDir),
 			langGetter,
 		)
+	})
+}
+
+// InitGlobalErrorManagerWithLoader 使用调用方提供的、已完成校验的消息加载器。
+// 适合服务通过 go:embed 在启动阶段加载标准 catalog。
+func InitGlobalErrorManagerWithLoader(messageLoader ErrorMessageLoader, langGetter func(context.Context) string) {
+	if messageLoader == nil {
+		panic("error message loader cannot be nil")
+	}
+	globalErrorManagerOnce.Do(func() {
+		globalErrorManager = NewErrorManager(messageLoader, langGetter)
 	})
 }
 

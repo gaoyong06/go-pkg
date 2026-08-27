@@ -1,120 +1,170 @@
-// Package i18n 提供国际化（i18n）翻译服务
+// Package i18n 提供基于 go-i18n 的翻译服务。
 package i18n
 
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
-	"sync"
+	"sort"
+	"strings"
 
-	"github.com/nicksnyder/go-i18n/v2/i18n"
+	goi18n "github.com/nicksnyder/go-i18n/v2/i18n"
 	"golang.org/x/text/language"
 )
 
-// BundleTranslator 基于 go-i18n Bundle 的翻译器实现
+// BundleTranslator 持有一个只读的 go-i18n Bundle 和请求语言解析器。
+// BundleTranslator 创建完成后不可变，可以安全地在多个请求之间复用。
 type BundleTranslator struct {
-	bundle *i18n.Bundle
-	mutex  sync.RWMutex
+	bundle   *goi18n.Bundle
+	resolver *Resolver
 }
 
-// NewBundleTranslator 创建 Bundle 翻译器
-// configDir: 配置文件目录（如 "." 表示当前目录）
-// 会自动加载 configDir/i18n/{lang}/*.json 文件
+// NewBundleTranslator 从 configDir/i18n 加载标准命名的 catalog 文件。
+// configDir 通常为服务工作目录；资源文件名必须是 active.<locale>.json。
+//
+// Deprecated: 使用 NewBundleTranslatorWithDefault 显式传入服务默认语言。
 func NewBundleTranslator(configDir string) (*BundleTranslator, error) {
-	bundle := i18n.NewBundle(language.Chinese)
-	bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
-
-	// 加载所有语言的翻译文件
-	i18nDir := filepath.Join(configDir, "i18n")
-	entries, err := ioutil.ReadDir(i18nDir)
-	if err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() {
-				lang := entry.Name()
-				// 加载该语言目录下的所有 JSON 文件
-				langDir := filepath.Join(i18nDir, lang)
-				files, err := ioutil.ReadDir(langDir)
-				if err == nil {
-					for _, file := range files {
-						if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
-							filePath := filepath.Join(langDir, file.Name())
-							_, err := bundle.LoadMessageFile(filePath)
-							if err != nil {
-								// 忽略加载错误，继续加载其他文件
-								continue
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return &BundleTranslator{
-		bundle: bundle,
-	}, nil
+	return NewBundleTranslatorWithDefault(configDir, "zh-CN")
 }
 
-// Translate 实现 Translator 接口
-func (t *BundleTranslator) Translate(ctx context.Context, key string, templateData map[string]interface{}) string {
-	lang := Language(ctx)
-	
-	t.mutex.RLock()
-	bundle := t.bundle
-	t.mutex.RUnlock()
-	
-	if bundle == nil {
-		return key
+// NewBundleTranslatorWithDefault 从 configDir/i18n 加载标准命名的 catalog 文件。
+func NewBundleTranslatorWithDefault(configDir, defaultLanguage string) (*BundleTranslator, error) {
+	root := filepath.Join(configDir, "i18n")
+	if info, err := os.Stat(configDir); err == nil && info.IsDir() && filepath.Base(filepath.Clean(configDir)) == "i18n" {
+		root = configDir
+	}
+	return newBundleTranslator(os.DirFS(root), defaultLanguage)
+}
+
+// NewBundleTranslatorFromFS 从嵌入式或其他 fs.FS 加载 catalog。
+// fsys 中的文件可以位于任意子目录，但必须使用 active.<locale>.json 命名。
+func NewBundleTranslatorFromFS(fsys fs.FS, defaultLanguage string) (*BundleTranslator, error) {
+	return newBundleTranslator(fsys, defaultLanguage)
+}
+
+func newBundleTranslator(fsys fs.FS, defaultLanguage string) (*BundleTranslator, error) {
+	if fsys == nil {
+		return nil, fmt.Errorf("translation filesystem is nil")
+	}
+	defaultTag, err := parseTag(defaultLanguage)
+	if err != nil {
+		return nil, fmt.Errorf("invalid translator default language: %w", err)
 	}
 
-	localizer := i18n.NewLocalizer(bundle, lang)
-	config := &i18n.LocalizeConfig{
+	bundle := goi18n.NewBundle(defaultTag)
+	bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
+	loadedTags := make([]string, 0)
+	loadedTagSet := make(map[string]struct{})
+	err = fs.WalkDir(fsys, ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		baseName := filepath.Base(path)
+		if entry.IsDir() || !strings.HasPrefix(baseName, "active.") || !strings.EqualFold(filepath.Ext(path), ".json") {
+			return nil
+		}
+		data, err := fs.ReadFile(fsys, path)
+		if err != nil {
+			return fmt.Errorf("read translation file %q: %w", path, err)
+		}
+		messageFile, err := bundle.ParseMessageFileBytes(data, filepath.ToSlash(path))
+		if err != nil {
+			return fmt.Errorf("parse translation file %q: %w", path, err)
+		}
+		if messageFile.Tag == language.Und {
+			return fmt.Errorf("translation file %q has an invalid language tag", path)
+		}
+		loadedTag := messageFile.Tag.String()
+		if _, exists := loadedTagSet[loadedTag]; exists {
+			return fmt.Errorf("duplicate translation language %q in file %q", loadedTag, path)
+		}
+		loadedTagSet[loadedTag] = struct{}{}
+		loadedTags = append(loadedTags, loadedTag)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(loadedTags) == 0 {
+		return nil, fmt.Errorf("no JSON translation files found")
+	}
+	if _, ok := loadedTagSet[defaultTag.String()]; !ok {
+		return nil, fmt.Errorf("default translation language %q is not loaded", defaultTag.String())
+	}
+
+	resolver, err := NewResolver(ResolverConfig{
+		DefaultLanguage:    defaultTag.String(),
+		SupportedLanguages: loadedTags,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build translator language resolver: %w", err)
+	}
+	return &BundleTranslator{bundle: bundle, resolver: resolver}, nil
+}
+
+// SupportedLanguages 返回 catalog 中已加载的语言标签。
+func (t *BundleTranslator) SupportedLanguages() []string {
+	if t == nil || t.resolver == nil {
+		return nil
+	}
+	languages := t.resolver.SupportedLanguages()
+	sort.Strings(languages)
+	return languages
+}
+
+// ResolveLanguage 将 Accept-Language 解析为 catalog 中的语言标签。
+func (t *BundleTranslator) ResolveLanguage(acceptLanguage string) string {
+	if t == nil || t.resolver == nil {
+		return ""
+	}
+	return t.resolver.Resolve(acceptLanguage)
+}
+
+// Translate 根据 context 中的语言翻译消息。
+func (t *BundleTranslator) Translate(ctx context.Context, key string, templateData map[string]interface{}) string {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return t.TranslateLanguage(Language(ctx), key, "", templateData)
+}
+
+// TranslateLanguage 使用指定语言翻译消息；缺失时返回 defaultMessage，未提供默认值则返回 key。
+func (t *BundleTranslator) TranslateLanguage(lang, key, defaultMessage string, templateData map[string]interface{}) string {
+	if t == nil || t.bundle == nil || t.resolver == nil || strings.TrimSpace(key) == "" {
+		return fallbackMessage(key, defaultMessage)
+	}
+	if strings.TrimSpace(lang) == "" {
+		lang = t.resolver.DefaultLanguage()
+	}
+	localizer := goi18n.NewLocalizer(t.bundle, lang)
+	config := &goi18n.LocalizeConfig{
 		MessageID:    key,
 		TemplateData: templateData,
 	}
-
-	translated, err := localizer.Localize(config)
-	if err != nil {
-		// 如果翻译失败，尝试使用默认语言
-		if lang != "zh-CN" {
-			ctx = WithLanguage(ctx, "zh-CN")
-			return t.Translate(ctx, key, templateData)
-		}
-		// 如果默认语言也失败，返回 key
-		return key
+	if defaultMessage != "" {
+		config.DefaultMessage = &goi18n.Message{ID: key, Other: defaultMessage}
 	}
-
+	translated, err := localizer.Localize(config)
+	if err != nil || strings.TrimSpace(translated) == "" {
+		return fallbackMessage(key, defaultMessage)
+	}
 	return translated
 }
 
-// TranslateWithDefault 带默认值的翻译函数
-func (t *BundleTranslator) TranslateWithDefault(ctx context.Context, key string, defaultMessage string, templateData map[string]interface{}) string {
-	lang := Language(ctx)
-	
-	t.mutex.RLock()
-	bundle := t.bundle
-	t.mutex.RUnlock()
-	
-	if bundle == nil {
-		return defaultMessage
+// TranslateWithDefault 是 TranslateLanguage 的 context 版本。
+func (t *BundleTranslator) TranslateWithDefault(ctx context.Context, key, defaultMessage string, templateData map[string]interface{}) string {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-
-	localizer := i18n.NewLocalizer(bundle, lang)
-	config := &i18n.LocalizeConfig{
-		MessageID: key,
-		DefaultMessage: &i18n.Message{
-			ID:    key,
-			Other: defaultMessage,
-		},
-		TemplateData: templateData,
-	}
-
-	translated, err := localizer.Localize(config)
-	if err != nil {
-		return defaultMessage
-	}
-
-	return translated
+	return t.TranslateLanguage(Language(ctx), key, defaultMessage, templateData)
 }
 
+func fallbackMessage(key, defaultMessage string) string {
+	if defaultMessage != "" {
+		return defaultMessage
+	}
+	return key
+}

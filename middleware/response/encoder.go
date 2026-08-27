@@ -18,6 +18,7 @@ type ErrorEncoderOption func(*errorEncoderOptions)
 type errorEncoderOptions struct {
 	logger          *log.Helper
 	requestMetadata func(*http.Request) map[string]string
+	messageResolver func(*http.Request, error, bool) string
 }
 
 // WithErrorLogger 启用统一错误日志记录。
@@ -33,6 +34,14 @@ func WithErrorLogger(logger log.Logger) ErrorEncoderOption {
 func WithErrorRequestMetadata(extractor func(*http.Request) map[string]string) ErrorEncoderOption {
 	return func(options *errorEncoderOptions) {
 		options.requestMetadata = extractor
+	}
+}
+
+// WithErrorMessageResolver 配置请求级错误文案解析器。
+// 解析器适合在 HTTP 边界按 Accept-Language 本地化稳定错误码。
+func WithErrorMessageResolver(resolver func(*http.Request, error, bool) string) ErrorEncoderOption {
+	return func(options *errorEncoderOptions) {
+		options.messageResolver = resolver
 	}
 }
 
@@ -183,14 +192,24 @@ func NewErrorEncoder(errorHandler ErrorHandler, opts ...ErrorEncoderOption) func
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		if options.messageResolver != nil {
+			w.Header().Add("Vary", "Accept-Language")
+		}
 		w.WriteHeader(errorHandler.GetHTTPStatusCode(err))
 		host := r.Host
+
+		errorMessage := errorHandler.GetErrorMessage(err, false)
+		if options.messageResolver != nil {
+			if localized := options.messageResolver(r, err, false); localized != "" {
+				errorMessage = localized
+			}
+		}
 
 		response := &ResponseStructure{
 			Success:      false,
 			Data:         nil,
 			ErrorCode:    errorHandler.GetErrorCode(err),
-			ErrorMessage: errorHandler.GetErrorMessage(err, false),
+			ErrorMessage: errorMessage,
 			ShowType:     errorHandler.GetErrorShowType(err),
 			TraceId:      traceID,
 			Host:         host,
