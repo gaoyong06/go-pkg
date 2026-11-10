@@ -16,6 +16,9 @@ import (
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
+// BuildTime 由编译时的 -ldflags -X 注入 UTC 构建时间，未注入时明确标记为未知。
+var BuildTime = "unknown"
+
 // Config 日志配置结构体
 // 调用者需将具体的配置对象映射到此结构体
 type Config struct {
@@ -67,6 +70,7 @@ func InitLogger(c *Config, id, name, version string) (log.Logger, string) {
 		"service.id", id,
 		"service.name", name,
 		"service.version", version,
+		"build.time", BuildTime,
 	), conf.FilePath
 }
 

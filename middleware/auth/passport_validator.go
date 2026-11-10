@@ -48,6 +48,11 @@ func NewPassportTokenValidator(grpcAddr string, timeout time.Duration, logger lo
 	}, nil
 }
 
+// NewPassportTokenValidatorWithClient 复用服务已有连接，避免重复创建 Passport 客户端。
+func NewPassportTokenValidatorWithClient(client passportv1.PassportClient, logger log.Logger) *PassportTokenValidator {
+	return &PassportTokenValidator{client: client, log: log.NewHelper(logger)}
+}
+
 // NewPassportTokenValidatorWithDefaults 使用默认超时时间创建
 // 默认超时时间为 10 秒
 func NewPassportTokenValidatorWithDefaults(grpcAddr string, logger log.Logger) (*PassportTokenValidator, error) {

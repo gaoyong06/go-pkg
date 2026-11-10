@@ -5,12 +5,15 @@ import (
 	"context"
 	"strings"
 
+	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/middleware"
 	"github.com/go-kratos/kratos/v2/transport"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+type validationErrorKey struct{}
 
 // Middleware 认证中间件，验证 token 并提取用户信息
 // 如果 token 验证失败，不阻止请求，但不在 context 中设置用户信息
@@ -57,6 +60,7 @@ func Middleware(validator *PassportTokenValidator, config *Config, logger log.Lo
 						claims, err := validator.ValidateToken(ctx, token)
 						if err != nil {
 							log.NewHelper(logger).Warnf("Token validation failed: %v", err)
+							ctx = context.WithValue(ctx, validationErrorKey{}, err)
 							// 如果 token 验证失败，不阻止请求，但不在 context 中设置用户信息
 							// 这样可以让某些接口允许匿名访问
 						} else {
@@ -88,6 +92,14 @@ func RequireAuth(validator *PassportTokenValidator, config *Config, logger log.L
 
 			claims, ok := GetUserClaimsFromContext(ctx)
 			if !ok || claims.UserID == "" {
+				if err, exists := ctx.Value(validationErrorKey{}).(error); exists {
+					code := kerrors.FromError(err).Code
+					// Passport 不可用时不把已有会话误判为失效，客户端可以保留身份并重试。
+					invalid := status.Code(err) == codes.Unauthenticated || code == 401 || code == 403 || code == 110501 || code == 110502 || code == 100001001
+					if !invalid {
+						return nil, status.Error(codes.Unavailable, "identity service unavailable")
+					}
+				}
 				return nil, status.Error(codes.Unauthenticated, "authentication required")
 			}
 
